@@ -14,8 +14,7 @@ package org.eclipse.lsp4e.test;
 import static org.eclipse.lsp4e.test.utils.TestUtils.waitForAndAssertCondition;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
@@ -74,11 +73,6 @@ public class LanguageServerWrapperTest extends AbstractTestWithProject {
 	 */
 	@Test
 	public void testStopAndActive() throws CoreException, AssertionError, InterruptedException, ExecutionException {
-		if (System.getProperty("os.name").toLowerCase().startsWith("windows") || System.getenv("JENKINS_URL") != null) {
-			// FIXME temporarily disabling test on Windows and Jenkins because of https://github.com/eclipse/lsp4e/issues/1103
-			System.err.println("Temporarily skipping test execution. See https://github.com/eclipse/lsp4e/issues/1103");
-			return;
-		}
 		IFile testFile1 = TestUtils.createFile(project, "shouldUseExtension.lsptWithMultiRoot", "");
 		IEditorPart editor1 = TestUtils.openEditor(testFile1);
 		@NonNull Collection<LanguageServerWrapper> wrappers = LanguageServiceAccessor.getLSWrappers(testFile1, request -> true);

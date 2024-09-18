@@ -118,6 +118,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
+import io.github.futures4j.ExtendedFuture;
+
 public class LanguageServerWrapper {
 
 	private final IFileBufferListener fileBufferListener = new FileBufferListenerAdapter() {
@@ -160,7 +162,7 @@ public class LanguageServerWrapper {
 
 	protected @Nullable StreamConnectionProvider lspStreamProvider;
 	private @Nullable Future<?> launcherFuture;
-	private @Nullable CompletableFuture<@Nullable Void> initializeFuture;
+	private volatile @Nullable ExtendedFuture<@Nullable Void> initializeFuture;
 	private final AtomicReference<@Nullable IProgressMonitor> initializeFutureMonitorRef = new AtomicReference<>();
 	private final int initializeFutureNumberOfStages = 7;
 	private @Nullable LanguageServer languageServer;
@@ -287,7 +289,7 @@ public class LanguageServerWrapper {
 			final URI rootURI = getRootURI();
 			final Job job = createInitializeLanguageServerJob();
 			this.launcherFuture = new CompletableFuture<>();
-			this.initializeFuture = CompletableFuture.supplyAsync(() -> {
+			this.initializeFuture = ExtendedFuture.supplyAsync(() -> {
 				advanceInitializeFutureMonitor();
 				final StreamConnectionProvider lspStreamProvider;
 				if (LoggingStreamConnectionProviderProxy.shouldLog(serverDefinition.id)) {
@@ -303,7 +305,9 @@ public class LanguageServerWrapper {
 					throw new UncheckedIOException(e);
 				}
 				return null;
-			}).thenRun(() -> {
+			})
+			.asCancellableByDependents(true)
+			.thenRun(() -> {
 				advanceInitializeFutureMonitor();
 				final var languageClient = this.languageClient = serverDefinition.createLanguageClient();
 
@@ -393,7 +397,7 @@ public class LanguageServerWrapper {
 			protected IStatus run(IProgressMonitor monitor) {
 				final var initializeFutureMonitor = SubMonitor.convert(monitor, initializeFutureNumberOfStages);
 				initializeFutureMonitorRef.set(initializeFutureMonitor);
-				CompletableFuture<@Nullable Void> currentInitializeFuture = initializeFuture;
+				ExtendedFuture<@Nullable Void> currentInitializeFuture = initializeFuture;
 				try {
 					if (currentInitializeFuture != null) {
 						currentInitializeFuture.join();
@@ -693,10 +697,10 @@ public class LanguageServerWrapper {
 	 * @return null if not connection has happened, a future that completes when file is initialized otherwise
 	 * @noreference internal so far
 	 */
-	private @Nullable CompletableFuture<LanguageServerWrapper> connect(URI uri, @Nullable IDocument document) {
+	private @Nullable ExtendedFuture<LanguageServerWrapper> connect(URI uri, @Nullable IDocument document) {
 		removeStopTimerTask();
 		if (this.connectedDocuments.containsKey(uri)) {
-			return CompletableFuture.completedFuture(this);
+			return ExtendedFuture.completedFuture(this);
 		}
 		start();
 		if (this.initializeFuture == null) {
@@ -774,7 +778,7 @@ public class LanguageServerWrapper {
 	 */
 	@Nullable
 	protected LanguageServer getServer() {
-		CompletableFuture<LanguageServer> languagServerFuture = getInitializedServer();
+		ExtendedFuture<LanguageServer> languagServerFuture = getInitializedServer();
 		if (Display.getCurrent() != null) { // UI Thread
 			return this.languageServer;
 		} else {
@@ -789,14 +793,18 @@ public class LanguageServerWrapper {
 	 * <p>If done in the UI thread, a job will be created
 	 * displaying that the server is being initialized</p>
 	 */
-	protected CompletableFuture<LanguageServer> getInitializedServer() {
+	protected ExtendedFuture<LanguageServer> getInitializedServer() {
 		start();
 
-		final CompletableFuture<@Nullable Void> currentInitializeFuture = initializeFuture;
+		final ExtendedFuture<@Nullable Void> currentInitializeFuture = initializeFuture;
 		if (currentInitializeFuture != null && !currentInitializeFuture.isDone()) {
 			return currentInitializeFuture.thenApply(r -> castNonNull(this.languageServer));
 		}
-		return CompletableFuture.completedFuture(this.languageServer);
+
+		final var languageServer = this.languageServer;
+		if(languageServer == null)
+			return ExtendedFuture.failedFuture(new IllegalStateException("LanguageServer is not available!")); //$NON-NLS-1$
+		return ExtendedFuture.completedFuture(languageServer);
 	}
 
 	/**
@@ -865,7 +873,7 @@ public class LanguageServerWrapper {
 	 * </ul>
 	 * @return Async result
 	 */
-	<@Nullable T> CompletableFuture<T> executeImpl(Function<LanguageServer, ? extends CompletableFuture<T>> fn) {
+	<@Nullable T> ExtendedFuture<T> executeImpl(Function<LanguageServer, ? extends CompletableFuture<T>> fn) {
 		// Run the supplied function, ensuring that it is enqueued on the dispatch thread associated with the
 		// wrapped language server, and is thus guaranteed to be seen in the correct order with respect
 		// to e.g. previous document changes
@@ -879,7 +887,7 @@ public class LanguageServerWrapper {
 			request.set(res);
 			return res;
 		};
-		CompletableFuture<T> res = getInitializedServer().thenComposeAsync(cancelWrapper, this.dispatcher);
+		ExtendedFuture<T> res = getInitializedServer().thenComposeAsync(cancelWrapper, this.dispatcher);
 		res.exceptionally(e -> {
 			if (e instanceof CancellationException) {
 				CompletableFuture<T> stage = request.get();

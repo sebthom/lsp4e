@@ -94,6 +94,7 @@ import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.ISelectionProvider;
 import org.eclipse.lsp4e.internal.ArrayUtil;
 import org.eclipse.lsp4e.internal.DocumentInputStream;
+import org.eclipse.lsp4e.internal.ResourceForUriCache;
 import org.eclipse.lsp4e.refactoring.CreateFileChange;
 import org.eclipse.lsp4e.refactoring.DeleteExternalFile;
 import org.eclipse.lsp4e.refactoring.LSPTextChange;
@@ -458,24 +459,7 @@ public final class LSPEclipseUtils {
 
 	@Nullable
 	public static IResource findResourceFor(@Nullable URI uri) {
-		if (uri == null) {
-			return null;
-		}
-		if (FILE_SCHEME.equals(uri.getScheme())) {
-			IWorkspaceRoot wsRoot = ResourcesPlugin.getWorkspace().getRoot();
-
-			IFile[] files = wsRoot.findFilesForLocationURI(uri);
-			if (files.length > 0) {
-				IFile file = findMostNested(files);
-				if(file!=null) {
-					return file;
-				}
-			}
-
-			return ArrayUtil.findFirst(wsRoot.findContainersForLocationURI(uri));
-		} else {
-			return Adapters.adapt(uri, IResource.class, true);
-		}
+		return ResourceForUriCache.get(uri);
 	}
 
 	public static @Nullable IFile findMostNested(IFile[] files) {

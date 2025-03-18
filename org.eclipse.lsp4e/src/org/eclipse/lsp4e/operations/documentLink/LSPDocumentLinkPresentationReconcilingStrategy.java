@@ -5,6 +5,9 @@
  * which is available at https://www.eclipse.org/legal/epl-2.0/
  *
  * SPDX-License-Identifier: EPL-2.0
+ *
+ * Contributors:
+ *     Jozef Tomek - fix getting misaligned style ranges (#1220)
  *******************************************************************************/
 package org.eclipse.lsp4e.operations.documentLink;
 
@@ -21,6 +24,7 @@ import org.eclipse.jface.text.ITextViewer;
 import org.eclipse.jface.text.ITextViewerLifecycle;
 import org.eclipse.jface.text.Region;
 import org.eclipse.jface.text.TextPresentation;
+import org.eclipse.jface.text.TextViewer;
 import org.eclipse.jface.text.reconciler.DirtyRegion;
 import org.eclipse.jface.text.reconciler.IReconcilingStrategy;
 import org.eclipse.jface.text.reconciler.IReconcilingStrategyExtension;
@@ -93,6 +97,7 @@ public class LSPDocumentLinkPresentationReconcilingStrategy
 		if (document == null || links == null || viewer == null) {
 			return;
 		}
+		TextViewer textViewer = viewer instanceof TextViewer ? (TextViewer) viewer : null;
 		for (DocumentLink link : links) {
 			try {
 				// Compute link region
@@ -101,32 +106,47 @@ public class LSPDocumentLinkPresentationReconcilingStrategy
 				int length = end - start;
 				final var linkRegion = new Region(start, length);
 
-				// Update existing style range with underline or create a new style range with
-				// underline
-				StyleRange styleRange = null;
-				StyleRange[] styleRanges = viewer.getTextWidget().getStyleRanges(start, length);
-				if (styleRanges != null && styleRanges.length > 0) {
-					// It exists some styles for the range of document link, update just the
-					// underline style.
-					for (StyleRange s : styleRanges) {
-						s.underline = true;
+				// Create a new style range with underline for the whole link region, then add existing style range(s)
+				// updated with underline on top (if there are any)
+				var styleRange = new StyleRange();
+				styleRange.underline = true;
+				styleRange.start = start;
+				styleRange.length = length;
+				final var presentation = new TextPresentation(linkRegion, 100);
+				presentation.addStyleRange(styleRange);
+
+				StyleRange[] styleRanges = null;
+				if (textViewer != null) {
+					// Returns widget region just for visible part of the link region
+					var widgetRange = textViewer.modelRange2WidgetRange(linkRegion);
+					if (widgetRange != null) {
+						int widgetOffset = widgetRange.getOffset();
+						styleRanges = textViewer.getTextWidget().getStyleRanges(widgetOffset, widgetRange.getLength());
+						if (styleRanges != null && styleRanges.length > 0) {
+							// There are some styles for the range of document link, first update the underline style.
+							// Only part of the link area may be visible, so we need to adjust our document coordinates
+							int visibleStart = textViewer.widgetOffset2ModelOffset(widgetOffset);
+							int startOffset = visibleStart - widgetOffset;
+							for (StyleRange s : styleRanges) {
+								s.underline = true;
+								s.start += startOffset; // shift to translate to document coordinates
+							}
+							// Then overlay on top of whole-region style range
+							presentation.replaceStyleRanges(styleRanges);
+						}
 					}
-					final var presentation = new TextPresentation(linkRegion, 100);
-					presentation.replaceStyleRanges(styleRanges);
-					viewer.changeTextPresentation(presentation, false);
-
 				} else {
-					// No styles for the range of document link, create a style range with underline
-					styleRange = new StyleRange();
-					styleRange.underline = true;
-					styleRange.start = start;
-					styleRange.length = length;
-
-					final var presentation = new TextPresentation(linkRegion, 100);
-					presentation.replaceStyleRange(styleRange);
-					viewer.changeTextPresentation(presentation, false);
+					styleRanges = viewer.getTextWidget().getStyleRanges(start, length);
+					if (styleRanges != null && styleRanges.length > 0) {
+						// There are some styles for the range of document link, first update the underline style.
+						for (StyleRange s : styleRanges) {
+							s.underline = true;
+						}
+						// Then overlay on top of whole-region style range
+						presentation.replaceStyleRanges(styleRanges);
+					}
 				}
-
+				viewer.changeTextPresentation(presentation, false);
 			} catch (BadLocationException e) {
 				LanguageServerPlugin.logError(e);
 			}

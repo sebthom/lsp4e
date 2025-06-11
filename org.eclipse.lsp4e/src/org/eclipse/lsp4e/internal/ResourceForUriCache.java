@@ -9,10 +9,12 @@
  * Contributors:
  *   See git history
  *******************************************************************************/
-
 package org.eclipse.lsp4e.internal;
 
 import java.net.URI;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
@@ -21,9 +23,6 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.Adapters;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.lsp4e.LSPEclipseUtils;
-
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 
 /**
  * <p>NOTE: In case a resource has been moved or deleted the entry will not be removed automatically.
@@ -34,8 +33,16 @@ import com.google.common.cache.CacheBuilder;
  * Therefore entries can be removed before the limit exceeds.
  */
 public final class ResourceForUriCache {
+
 	private static final String FILE_SCHEME = "file"; //$NON-NLS-1$
-	private static final Cache<URI, IResource> cache = CacheBuilder.newBuilder().maximumSize(100).build();
+	private static final Map<URI, IResource> cache = Collections.synchronizedMap(new LinkedHashMap<>(100, 0.75f, true) {
+		private static final long serialVersionUID = 1L;
+
+		@Override
+	    protected boolean removeEldestEntry(Map.Entry<URI, IResource> eldest) {
+	        return size() > 100;
+	    }
+    });
 
 	private ResourceForUriCache() {
 		// this class shouldn't be instantiated
@@ -59,12 +66,12 @@ public final class ResourceForUriCache {
 		URI localURI = uri;
 		IResource resource = null;
 		if (localURI != null) {
-			resource = cache.getIfPresent(localURI);
+			resource = cache.get(localURI);
 			if (resource != null) {
 				if (resource.isAccessible()) {
 					return resource;
 				}
-				cache.invalidate(localURI);
+				cache.remove(localURI);
 			}
 			resource = findResourceFor(localURI);
 			if (resource != null) {
@@ -92,7 +99,4 @@ public final class ResourceForUriCache {
 			return Adapters.adapt(uri, IResource.class, true);
 		}
 	}
-
 }
-
-

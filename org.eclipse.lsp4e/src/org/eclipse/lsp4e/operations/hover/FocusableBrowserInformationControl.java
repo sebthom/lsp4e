@@ -38,7 +38,6 @@ import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.editors.text.EditorsUI;
 import org.eclipse.ui.texteditor.AbstractDecoratedTextEditorPreferenceConstants;
 
-import com.google.common.base.Strings;
 
 @SuppressWarnings("restriction")
 public class FocusableBrowserInformationControl extends BrowserInformationControl {
@@ -179,7 +178,7 @@ public class FocusableBrowserInformationControl extends BrowserInformationContro
 				(foreground != null ? "color: " + toHTMLrgb(foreground.getRGB()) + "; " : "") + //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				" }</style>"; //$NON-NLS-1$
 
-		String hlStyle = null;
+		String hlStyle = ""; //$NON-NLS-1$
 		try {
 			var pluginClass = LanguageServerPlugin.getDefault().getClass();
 			URL urlHJScript = pluginClass.getResource("/resources/highlight.min.js/highlight.min.js"); //$NON-NLS-1$
@@ -198,7 +197,7 @@ public class FocusableBrowserInformationControl extends BrowserInformationContro
 		}
 
 		int headIndex = html.indexOf(HEAD);
-		String headContent = style + Strings.nullToEmpty(hlStyle);
+		String headContent = style + hlStyle;
 		if (headIndex > 0) {
 			return new StringBuilder(html).insert(headIndex, headContent).toString();
 		} else {

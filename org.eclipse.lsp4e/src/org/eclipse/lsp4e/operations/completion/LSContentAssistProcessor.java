@@ -30,6 +30,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.jdt.annotation.Nullable;
@@ -61,9 +62,6 @@ import org.eclipse.lsp4j.jsonrpc.CancelChecker;
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.ui.texteditor.ITextEditor;
-
-import com.google.common.base.Functions;
-import com.google.common.base.Strings;
 
 public class LSContentAssistProcessor implements IContentAssistProcessor {
 
@@ -267,7 +265,7 @@ public class LSContentAssistProcessor implements IContentAssistProcessor {
 		// Stop the compute of ICompletionProposal if the completion has been cancelled
 		cancelChecker.checkCanceled();
 		CompletionItemDefaults defaults = completionList.map(o -> null, CompletionList::getItemDefaults);
-		return completionList.map( Functions.identity(), CompletionList::getItems).stream() //
+		return completionList.map(Function.identity(), CompletionList::getItems).stream() //
 				.filter(Objects::nonNull) //
 				.map(item -> new LSCompletionProposal(document, offset, item, defaults, languageServerWrapper, isIncomplete))
 				.filter(proposal -> {
@@ -363,7 +361,7 @@ public class LSContentAssistProcessor implements IContentAssistProcessor {
 		for (char c : initialArray) {
 			triggers.add(c);
 		}
-		additionalTriggers.stream().filter(s -> !Strings.isNullOrEmpty(s)).map(triggerChar -> triggerChar.charAt(0))
+		additionalTriggers.stream().filter(s -> s != null && !s.isEmpty()).map(triggerChar -> triggerChar.charAt(0))
 				.forEach(triggers::add);
 		final var res = new char[triggers.size()];
 		int i = 0;

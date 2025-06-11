@@ -39,6 +39,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -119,7 +120,6 @@ import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.widgets.Display;
 
 import com.google.common.base.Functions;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -285,17 +285,24 @@ public class LanguageServerWrapper {
 		this.initialPath = initialPath;
 		this.serverDefinition = serverDefinition;
 		this.connectedDocuments = new HashMap<>();
-		String projectName = (project != null && !serverDefinition.isSingleton) ? ("@" + project.getName()) : "";  //$NON-NLS-1$//$NON-NLS-2$
+		final String projectName = (project != null && !serverDefinition.isSingleton) ? ("@" + project.getName()) : "";  //$NON-NLS-1$//$NON-NLS-2$
 		final var dispatcherThreadNameFormat = "LS-" + serverDefinition.id + projectName + "#dispatcher"; //$NON-NLS-1$ //$NON-NLS-2$
-		this.dispatcher = Executors
-				.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(dispatcherThreadNameFormat).build());
+		this.dispatcher = Executors.newSingleThreadExecutor(r -> {
+			final Thread thread = Executors.defaultThreadFactory().newThread(r);
+			thread.setName(dispatcherThreadNameFormat);
+			return thread;
+		});
 
 		// Executor service passed through to the LSP4j layer when we attempt to start the LS. It will be used
 		// to create a listener that sits on the input stream and processes inbound messages (responses, or server-initiated
 		// requests).
-		final var listenerThreadNameFormat = "LS-" + serverDefinition.id + projectName + "#listener-%d"; //$NON-NLS-1$ //$NON-NLS-2$
-		this.listener = Executors
-				.newCachedThreadPool(new ThreadFactoryBuilder().setNameFormat(listenerThreadNameFormat).build());
+		final String listenerThreadNamePrefix = "LS-" + serverDefinition.id + projectName + "#listener-"; //$NON-NLS-1$ //$NON-NLS-2$
+		final var threadCount = new AtomicLong();
+		this.listener = Executors.newSingleThreadExecutor(r -> {
+			final Thread thread = Executors.defaultThreadFactory().newThread(r);
+			thread.setName(listenerThreadNamePrefix + threadCount.incrementAndGet());
+			return thread;
+		});
 	}
 
 	void stopDispatcher() {

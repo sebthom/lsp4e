@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -54,9 +55,6 @@ import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.part.FileEditorInput;
 import org.eclipse.ui.tests.harness.util.DisplayHelper;
-
-import com.google.common.io.MoreFiles;
-import com.google.common.io.RecursiveDeleteOption;
 
 public class TestUtils {
 
@@ -117,16 +115,13 @@ public class TestUtils {
 		IWorkbenchPage page = workbenchWindow.getActivePage();
 		final var input = new FileEditorInput(file);
 
-		return List.of(page.getEditorReferences()).stream()
-			.filter(r -> {
-				try {
-					return r.getEditorInput().equals(input);
-				} catch (PartInitException e) {
-					return false;
-				}
-			})
-			.map(r -> r.getEditor(false))
-			.findAny().orElse(null);
+		return List.of(page.getEditorReferences()).stream().filter(r -> {
+			try {
+				return r.getEditorInput().equals(input);
+			} catch (PartInitException e) {
+				return false;
+			}
+		}).map(r -> r.getEditor(false)).findAny().orElse(null);
 	}
 
 	public static IEditorPart getActiveEditor() {
@@ -149,7 +144,8 @@ public class TestUtils {
 		}
 
 		// avoids java.lang.IllegalArgumentException: Attempted to beginRule:
-		// P/WorkspaceFoldersTest_testPojectCreate_1726575959224, does not match outer scope rule: P/
+		// P/WorkspaceFoldersTest_testPojectCreate_1726575959224, does not match outer
+		// scope rule: P/
 		ws.run(monitor -> {
 			if (!project.exists()) {
 				project.create(null);
@@ -171,7 +167,8 @@ public class TestUtils {
 		}
 
 		// avoids java.lang.IllegalArgumentException: Attempted to beginRule:
-		// P/WorkspaceFoldersTest_testPojectCreate_1726575959224, does not match outer scope rule: P/
+		// P/WorkspaceFoldersTest_testPojectCreate_1726575959224, does not match outer
+		// scope rule: P/
 		ws.run(monitor -> {
 			if (!project.exists()) {
 				IProjectDescription desc = ws.newProjectDescription(projectName);
@@ -228,7 +225,11 @@ public class TestUtils {
 
 	public static void delete(Path path) throws IOException {
 		if (path != null && Files.exists(path)) {
-			MoreFiles.deleteRecursively(path, RecursiveDeleteOption.ALLOW_INSECURE);
+			try (final var files = Files.walk(path)) {
+				files.sorted(Comparator.reverseOrder()) //
+						.map(Path::toFile) //
+						.forEach(File::delete);
+			}
 		}
 	}
 

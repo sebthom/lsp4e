@@ -11,8 +11,13 @@
  *******************************************************************************/
 package org.eclipse.lsp4e;
 
+import  static java.io.OutputStream.nullOutputStream;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import java.io.PrintStream;
+import java.security.DigestOutputStream;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -27,19 +32,18 @@ import org.eclipse.lsp4e.ui.LSPImages;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.osgi.framework.BundleContext;
 
-import com.google.common.base.Throwables;
-import com.google.common.hash.HashCode;
-import com.google.common.hash.Hashing;
-
 public class LanguageServerPlugin extends AbstractUIPlugin {
 
 	/**
 	 * Used by {@link #logError(String, Throwable)} to prevent logging the same
 	 * exception of certain types repeatedly
 	 */
-	private static final ConcurrentMap<HashCode, Integer> EXCEPTIONS_COUNTER = new ConcurrentHashMap<>();
+	private static final ConcurrentMap<String /* sha256 */, Integer> EXCEPTIONS_COUNTER = new ConcurrentHashMap<>();
 
-	/** Job family identifier for the "background update markers from diagnostics" job. */
+	/**
+	 * Job family identifier for the "background update markers from diagnostics"
+	 * job.
+	 */
 	public static final Object FAMILY_UPDATE_MARKERS = new Object();
 	/** Job family identifier for the "initialize language server" job. */
 	public static final Object FAMILY_INITIALIZE_LANGUAGE_SERVER = new Object();
@@ -105,10 +109,18 @@ public class LanguageServerPlugin extends AbstractUIPlugin {
 		final var plugin = LanguageServerPlugin.plugin;
 		if (plugin != null) {
 			if (!DEBUG && thr instanceof BadLocationException) {
-				final HashCode key = Hashing.sha256().hashString(Throwables.getStackTraceAsString(thr), UTF_8);
-				if (EXCEPTIONS_COUNTER.getOrDefault(key, 0) > 2)
-					return;
-				EXCEPTIONS_COUNTER.compute(key, (k, v) -> v == null ? 1 : ++v);
+				try {
+					final var md = MessageDigest.getInstance("SHA-256"); //$NON-NLS-1$
+					try (var ps = new PrintStream(new DigestOutputStream(nullOutputStream(), md), false, UTF_8)) {
+						thr.printStackTrace(ps);
+					}
+					String key = HexFormat.of().formatHex(md.digest());
+					if (EXCEPTIONS_COUNTER.getOrDefault(key, 0) > 2)
+						return;
+					EXCEPTIONS_COUNTER.compute(key, (k, v) -> v == null ? 1 : ++v);
+				} catch (Exception ex) {
+					// ignore
+				}
 			}
 			plugin.getLog().log(new Status(IStatus.ERROR, PLUGIN_ID, 0, message, thr));
 		}
@@ -141,7 +153,7 @@ public class LanguageServerPlugin extends AbstractUIPlugin {
 
 	/**
 	 * Returns whether log trace is enabled for this plugin.
-	 * 
+	 *
 	 * @return true if the trace debug option is enabled, false otherwise
 	 */
 	public static boolean isLogTraceEnabled() {

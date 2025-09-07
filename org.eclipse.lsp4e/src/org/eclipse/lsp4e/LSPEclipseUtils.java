@@ -186,6 +186,7 @@ public final class LSPEclipseUtils {
 	private static final String MARKDOWN = "markdown"; //$NON-NLS-1$
 	private static final String MD = "md"; //$NON-NLS-1$
 	private static final int MAX_BROWSER_NAME_LENGTH = 30;
+	private static Set<IPath> connectedFiles = new HashSet<IPath>();
 
 	private LSPEclipseUtils() {
 		// this class shouldn't be instantiated
@@ -562,27 +563,48 @@ public final class LSPEclipseUtils {
 		if (resource == null) {
 			return null;
 		}
+		IDocument document = null;
+		synchronized(connectedFiles) {
+			document = getExistingDocument(resource);
 
-		IDocument document = getExistingDocument(resource);
-
-		if (document == null && resource.getType() == IResource.FILE) {
-			ITextFileBufferManager bufferManager = FileBuffers.getTextFileBufferManager();
-			if (bufferManager == null)
-				return document;
-			try {
-				bufferManager.connect(resource.getFullPath(), LocationKind.IFILE, new NullProgressMonitor());
-			} catch (CoreException e) {
-				LanguageServerPlugin.logError(e);
-				return document;
-			}
-
-			ITextFileBuffer buffer = bufferManager.getTextFileBuffer(resource.getFullPath(), LocationKind.IFILE);
-			if (buffer != null) {
-				document = buffer.getDocument();
+			if (document == null && resource.getType() == IResource.FILE) {
+				ITextFileBufferManager bufferManager = FileBuffers.getTextFileBufferManager();
+				if (bufferManager == null) {
+					return document;
+				}
+				try {
+					bufferManager.connect(resource.getFullPath(), LocationKind.IFILE, new NullProgressMonitor());
+					connectedFiles.add(resource.getFullPath());
+				} catch (CoreException e) {
+					LanguageServerPlugin.logError(e);
+					return document;
+				}
+				ITextFileBuffer buffer = bufferManager.getTextFileBuffer(resource.getFullPath(), LocationKind.IFILE);
+				if (buffer != null) {
+					document = buffer.getDocument();
+				}
 			}
 		}
-
 		return document;
+	}
+
+	public static void disconnectFromFileBuffer(@Nullable IPath path) {
+		if (path == null) {
+			return;
+		}
+		synchronized(connectedFiles) {
+			if (!connectedFiles.remove(path)) {
+				return;
+			}
+			ITextFileBufferManager bufferManager = FileBuffers.getTextFileBufferManager();
+			if (bufferManager != null) {
+				try {
+					bufferManager.disconnect(path, LocationKind.IFILE, new NullProgressMonitor());
+				} catch (Exception e) {
+					LanguageServerPlugin.logError(e);
+				}
+			}
+		}
 	}
 
 	public static @Nullable IDocument getExistingDocument(@Nullable IResource resource) {

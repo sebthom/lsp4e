@@ -48,8 +48,6 @@ import java.util.function.UnaryOperator;
 import org.eclipse.core.filebuffers.FileBuffers;
 import org.eclipse.core.filebuffers.IFileBuffer;
 import org.eclipse.core.filebuffers.IFileBufferListener;
-import org.eclipse.core.filebuffers.ITextFileBufferManager;
-import org.eclipse.core.filebuffers.LocationKind;
 import org.eclipse.core.filesystem.URIUtil;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
@@ -67,7 +65,6 @@ import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProduct;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
-import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.SubMonitor;
@@ -170,8 +167,7 @@ public class LanguageServerWrapper {
 			if (documentListener == null) {
 				return;
 			}
-			ITextFileBufferManager bufferManager = FileBuffers.getTextFileBufferManager();
-			disconnectTextFileBuffer(bufferManager, buffer.getLocation());
+			LSPEclipseUtils.disconnectFromFileBuffer(buffer.getLocation());
 			/*
 			 * This below is not working (will leak file buffer), because the client that connected the document
 			 * via old URI can't always know that the file has moved and so it may try to use old URI.
@@ -203,7 +199,7 @@ public class LanguageServerWrapper {
 				return;
 			}
 			// We need full path from buffer because file is deleted and disconnectTextFileBuffer(URI) will not work
-			disconnectTextFileBuffer(FileBuffers.getTextFileBufferManager(), buffer.getLocation());
+			LSPEclipseUtils.disconnectFromFileBuffer(buffer.getLocation());
 			disconnect(oldUri);
 		}
 	}
@@ -833,18 +829,7 @@ public class LanguageServerWrapper {
 		}
 		IFile file = ResourcesPlugin.getWorkspace().getRoot().getFileForLocation(location);
 		if (file != null) {
-			disconnectTextFileBuffer(FileBuffers.getTextFileBufferManager(), file.getFullPath());
-		}
-	}
-
-	private static void disconnectTextFileBuffer(ITextFileBufferManager bufferManager, IPath workspacePath) {
-		if (bufferManager == null || workspacePath == null) {
-			return;
-		}
-		try {
-			bufferManager.disconnect(workspacePath, LocationKind.IFILE, new NullProgressMonitor());
-		} catch (Exception e) {
-			LanguageServerPlugin.logError(e);
+			LSPEclipseUtils.disconnectFromFileBuffer(file.getFullPath());
 		}
 	}
 

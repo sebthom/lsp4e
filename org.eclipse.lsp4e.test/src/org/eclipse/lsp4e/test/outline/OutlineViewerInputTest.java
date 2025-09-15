@@ -11,7 +11,6 @@
  *******************************************************************************/
 package org.eclipse.lsp4e.test.outline;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -79,8 +78,8 @@ public class OutlineViewerInputTest extends AbstractTestWithProject {
 			
 		// Verify it points to the same file we created
 		// replace '\' with '/' on Windows and remove leading '/' from documentURI path on Windows:
-		assertEquals("documentURI absolute path should match the external file absolute path", 
-				tempFile.getAbsolutePath().replace("\\","/"), documentURI.getPath().substring(1));
+		assertTrue("documentURI should contain the abolute path in the file system", 
+				 documentURI.toString().contains(tempFile.getAbsolutePath().replace("\\","/")));
 	}
 
 

@@ -15,6 +15,7 @@ import java.util.ConcurrentModificationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Pattern;
 
 import org.eclipse.core.commands.operations.IOperationHistory;
 import org.eclipse.core.commands.operations.IOperationHistoryListener;
@@ -157,23 +158,26 @@ public class LSPonTypeFormattingReconcilingStrategy implements IReconcilingStrat
 		if (document == null || event == null || event.fText.isEmpty() || viewer == null) {
 			return;
 		}
-		final String[] triggerChar = new String[] { "" }; //$NON-NLS-1$
+		final String[] triggerCharArr = new String[] { "" }; //$NON-NLS-1$
 		var executor = LanguageServers.forDocument(document)
 			.withCapability(capabilities -> {
 				var provider = capabilities.getDocumentOnTypeFormattingProvider();
 				if (provider != null) {
-					if (event.fText.contains(provider.getFirstTriggerCharacter())) {
-						triggerChar[0] = provider.getFirstTriggerCharacter();
+					String firstTriggerChar = provider.getFirstTriggerCharacter();
+					var spaceRemovalRegex = "[\\s&&[^" + Pattern.quote(firstTriggerChar) + "]]+"; //$NON-NLS-1$ //$NON-NLS-2$
+					var filteredText = event.fText.replaceAll(spaceRemovalRegex, ""); //$NON-NLS-1$
+					if (filteredText.equals(firstTriggerChar)) {
+						triggerCharArr[0] = firstTriggerChar;
 					} else if (provider.getMoreTriggerCharacter() != null) {
 						for (String c : provider.getMoreTriggerCharacter()) {
 							if (event.fText.equals(c)) {
-								triggerChar[0] = c;
+								triggerCharArr[0] = c;
 								break;
 							}
 						}
 					}
 				}
-				return Either.forLeft(provider != null && !triggerChar[0].isEmpty());
+				return Either.forLeft(provider != null && !triggerCharArr[0].isEmpty());
 				});
 		if (!executor.anyMatching()) {
 			return;
@@ -186,7 +190,7 @@ public class LSPonTypeFormattingReconcilingStrategy implements IReconcilingStrat
 		try {
 			long modificationStamp = DocumentUtil.getDocumentModificationStamp(document);
 			int position = event.fOffset + event.fText.length();
-			DocumentOnTypeFormattingParams params = new DocumentOnTypeFormattingParams(textDocumentIdentifier, formattingOptions, LSPEclipseUtils.toPosition(position, document), triggerChar[0]);
+			DocumentOnTypeFormattingParams params = new DocumentOnTypeFormattingParams(textDocumentIdentifier, formattingOptions, LSPEclipseUtils.toPosition(position, document), triggerCharArr[0]);
 			var edits = executor.computeFirst(ls -> ls.getTextDocumentService().onTypeFormatting(params)).get(1, TimeUnit.SECONDS);
 			if (!edits.isEmpty()) {
 				int caretOffset = new VersionedEdits(modificationStamp, edits.get(), document).apply(position);

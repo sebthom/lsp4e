@@ -213,6 +213,15 @@ public class LanguageServerPreferencePage extends PreferencePage implements IWor
 			}
 		});
 
+		final var idConfigColumn = new TableViewerColumn(checkboxViewer, SWT.NONE);
+		idConfigColumn.getColumn().setText(Messages.PreferencesPage_languageServerId);
+		idConfigColumn.getColumn().setWidth(300);
+		idConfigColumn.setLabelProvider(new ColumnLabelProvider() {
+			@Override
+			public String getText(Object element) {
+				return ((ContentTypeToLanguageServerDefinition)element).getValue().id;
+			}
+		});
 
 		List<ContentTypeToLanguageServerDefinition> contentTypeToLanguageServerDefinitions = registry.getContentTypeToLSPExtensions();
 		if (contentTypeToLanguageServerDefinitions.stream()

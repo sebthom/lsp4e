@@ -146,6 +146,17 @@ public class LoggingPreferencePage extends PreferencePage implements IWorkbenchP
 			}
 		});
 		addLoggingColumnsToViewer(languageServerViewer);
+
+		final var idConfigColumn = new TableViewerColumn(languageServerViewer, SWT.NONE);
+		idConfigColumn.getColumn().setText(Messages.PreferencesPage_languageServerId);
+		idConfigColumn.getColumn().setWidth(300);
+		idConfigColumn.setLabelProvider(new ColumnLabelProvider() {
+			@Override
+			public String getText(Object element) {
+				return ((ContentTypeToLanguageServerDefinition)element).getValue().id;
+			}
+		});
+
 		languageServerViewer.getControl().setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 		languageServerViewer.getTable().setHeaderVisible(true);
 		languageServerViewer.getTable().setLinesVisible(true);

@@ -32,6 +32,7 @@ public final class Messages extends NLS {
 	public static String PreferencesPage_Remove;
 	public static String PreferencesPage_contentType;
 	public static String PreferencesPage_languageServer;
+	public static String PreferencesPage_languageServerId;
 	public static String PreferencesPage_Enabled;
 	public static String PreferencesPage_enablementCondition;
 	public static String PreferencePage_enablementCondition_true;

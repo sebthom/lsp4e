@@ -14,7 +14,7 @@
  *******************************************************************************/
 package org.eclipse.lsp4e;
 
-import static org.eclipse.lsp4e.internal.NullSafetyHelper.castNonNull;
+import static org.eclipse.lsp4e.internal.NullSafetyHelper.*;
 
 import java.net.URI;
 import java.util.ArrayDeque;
@@ -30,6 +30,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -56,7 +59,7 @@ import org.eclipse.ui.part.FileEditorInput;
  * {@link LanguageServerWrapper}.
  *
  */
-public class LanguageServiceAccessor {
+public final class LanguageServiceAccessor {
 
 	private LanguageServiceAccessor() {
 		// this class shouldn't be instantiated
@@ -67,13 +70,14 @@ public class LanguageServiceAccessor {
 	/**
 	 * This is meant for test code to clear state that might have leaked from other
 	 * tests. It isn't meant to be used in production code.
+	 *
+	 * Ensures servers are stopped (awaited) before shutting down dispatchers to
+	 * avoid rejected execution from terminated executors.
+	 *
+	 * @noreference
 	 */
 	public static void clearStartedServers() {
-		startedServers.removeIf(server -> {
-			server.stop();
-			server.stopDispatcher();
-			return true;
-		});
+		stopAllServersGracefully();
 	}
 
 	/**
@@ -577,7 +581,35 @@ public class LanguageServiceAccessor {
 		return res;
 	}
 
-	static void shutdownAllDispatchers() {
-		startedServers.forEach(LanguageServerWrapper::stopDispatcher);
+	static void stopAllServersGracefully() {
+		final var snapshot = List.copyOf(startedServers);
+		if (snapshot.isEmpty())
+			return;
+
+		final var futures = new ArrayList<CompletableFuture<@Nullable Void>>();
+		for (final var wrapper : snapshot) {
+			try {
+				futures.add(wrapper.stop());
+			} catch (Exception ex) {
+				LanguageServerPlugin.logWarning("Error initiating language server stop: " + ex.getMessage(), ex); //$NON-NLS-1$
+			}
+		}
+		if (futures.isEmpty())
+			return;
+
+		final var all = CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+		try {
+			all.get(10_000, TimeUnit.MILLISECONDS);
+		} catch (TimeoutException ex) {
+			LanguageServerPlugin.logWarning("Timed out waiting for language servers to stop", ex); //$NON-NLS-1$
+		} catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			LanguageServerPlugin.logWarning("Interrupted while waiting for language servers to stop", ex); //$NON-NLS-1$
+		} catch (ExecutionException ex) {
+			LanguageServerPlugin.logWarning("Errors occurred while stopping language servers: " + ex.getMessage(), ex); //$NON-NLS-1$
+		}
+
+		snapshot.forEach(LanguageServerWrapper::stopDispatcher);
+		startedServers.removeAll(snapshot);
 	}
 }

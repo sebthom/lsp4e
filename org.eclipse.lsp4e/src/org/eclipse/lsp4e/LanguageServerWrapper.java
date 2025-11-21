@@ -269,6 +269,10 @@ public class LanguageServerWrapper {
 	private final Timer timer = new Timer("Stop Language Server Task Processor"); //$NON-NLS-1$
 	private @Nullable TimerTask stopTimerTask;
 
+	/** Tracks an in-flight stop to make shutdown observable and idempotent. */
+	private final AtomicReference<@Nullable CompletableFuture<@Nullable Void>> stoppingRef = new AtomicReference<>(
+			null);
+
 	private final ExecutorService dispatcher;
 	private final ExecutorService listener;
 	private final ExecutorService cleaner;
@@ -721,7 +725,12 @@ public class LanguageServerWrapper {
 		return server == context.languageServer;
 	}
 
-	public synchronized void stop() {
+	public synchronized CompletableFuture<@Nullable Void> stop() {
+		final var inFlight = stoppingRef.get();
+		if (inFlight != null) {
+			return inFlight;
+		}
+
 		if (initializeFuture != null) {
 			initializeFuture.cancel(true);
 			initializeFuture = null;
@@ -731,10 +740,15 @@ public class LanguageServerWrapper {
 		context = new LanguageServerContext();
 		contextToStop.cancelled.set(true);
 
-		shutdown(contextToStop);
+		final var stopFuture = shutdown(contextToStop);
+		stoppingRef.set(stopFuture);
+		// When complete, allow subsequent stops to proceed (wrapper stays inactive
+		// anyway)
+		stopFuture.whenComplete((v, t) -> stoppingRef.compareAndSet(stopFuture, null));
+		return stopFuture;
 	}
 
-	private void shutdown(LanguageServerContext workingContext) {
+	private CompletableFuture<@Nullable Void> shutdown(LanguageServerContext workingContext) {
 		removeStopTimerTask();
 
 		if (this.languageClient != null) {
@@ -748,13 +762,24 @@ public class LanguageServerWrapper {
 		ResourcesPlugin.getWorkspace().removeResourceChangeListener(watchedFilesListener);
 		fileSystemWatcherManager.clear();
 
-		CompletableFuture.runAsync(workingContext::close);
+		// Close the launcher and provider on the dispatcher to preserve ordering.
+		// If the dispatcher is already shut down (e.g., a prior stop completed and
+		// executors were torn down), fall back to closing inline to avoid
+		// RejectedExecutionException during late cancellations.
+		final CompletableFuture<@Nullable Void> closeFuture;
+		if (dispatcher.isShutdown() || dispatcher.isTerminated()) {
+			workingContext.close();
+			closeFuture = CompletableFuture.completedFuture(null);
+		} else {
+			closeFuture = CompletableFuture.runAsync(workingContext::close, dispatcher);
+		}
 
 		while (!this.connectedDocuments.isEmpty()) {
 			disconnect(this.connectedDocuments.keySet().iterator().next());
 		}
 
 		FileBuffers.getTextFileBufferManager().removeFileBufferListener(fileBufferListener);
+		return closeFuture;
 	}
 
 	public @Nullable CompletableFuture<LanguageServerWrapper> connect(@Nullable IDocument document, IFile file) {

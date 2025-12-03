@@ -103,7 +103,7 @@ public class FocusableBrowserInformationControl extends BrowserInformationContro
 		setSize(hint.x, hint.y);
 
 		if (!"complete".equals(safeEvaluate(browser, "return document.readyState"))) { //$NON-NLS-1$ //$NON-NLS-2$
-			UI.getDisplay().timerExec(200, () -> updateBrowserSize(browser));
+			UI.getDisplay().timerExec(50, () -> updateBrowserSize(browser));
 			return;
 		}
 
@@ -191,6 +191,7 @@ public class FocusableBrowserInformationControl extends BrowserInformationContro
 			}));
 			return;
 		}
+		this.currentAsyncToken = null;
 		if (input instanceof String html) {
 			input = styleHtml(html);
 		}
